@@ -67,3 +67,26 @@ class PhysicsIMUSimulator:
             'accel': acc_body + acc_noise,
             'gyro': w_body + gyro_noise
         }
+
+    def simulate_from_position_only(self, pos_body_world):
+        """
+        仅根据关键点位置推算加速度 (当没有旋转信息时)
+        pos_body_world: (T, 3) 躯干中心点(如两髋中点)的世界坐标
+        """
+        dt = Config.DT
+        # v = dx/dt
+        vel = torch.zeros_like(pos_body_world)
+        vel[1:] = (pos_body_world[1:] - pos_body_world[:-1]) / dt
+
+        # a = dv/dt
+        acc_world = torch.zeros_like(vel)
+        acc_world[1:] = (vel[1:] - vel[:-1]) / dt
+
+        # 简单模型：假设身体坐标系和世界坐标系对齐 (对于跑步大概成立)
+        # acc_body ≈ acc_world - g
+        acc_reading = acc_world - self.g
+
+        # 甚至可以不需要 Gyro，如果你只用 Acc 做触地检测
+        gyro_reading = torch.zeros_like(acc_reading)
+
+        return acc_reading, gyro_reading

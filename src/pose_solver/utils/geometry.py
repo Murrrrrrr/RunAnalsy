@@ -46,3 +46,36 @@ def geodesic_distance(R1, R2):
 
 def batch_rodrigues(theta):
     return so3_exp_map(theta)
+
+def get_angle_batch(p1: torch.Tensor, p2: torch.Tensor, p3: torch.Tensor) -> torch.Tensor:
+    """
+    计算以 p2 为顶点的夹角 (p1-p2-p3)
+    支持批量计算，输入形状通常为 (Batch, 3) 或 (Frames, 3)
+
+    :param p1: 端点 A 坐标
+    :param p2: 顶点/中间点坐标 (如膝盖)
+    :param p3: 端点 B 坐标
+    :return: 角度张量 (Batch,)，单位为度 (Degree)
+    """
+    # 1. 构建向量：从顶点指向两端
+    v1 = p1 - p2
+    v2 = p3 - p2
+
+    # 2. 归一化向量 (Normalize)
+    # dim=-1 表示沿着 (x,y,z) 维度计算范数
+    v1_n = torch.nn.functional.normalize(v1, p=2, dim=-1)
+    v2_n = torch.nn.functional.normalize(v2, p=2, dim=-1)
+
+    # 3. 计算点积 (Dot Product)
+    # sum(v1_n * v2_n) 等价于 dot(v1_n, v2_n)
+    dot_product = torch.sum(v1_n * v2_n, dim=-1)
+
+    # 4. 数值稳定性截断 (Clamping)
+    # 防止因为浮点误差导致值略微超过 1.0 或 -1.0，从而使 acos 返回 NaN
+    dot_product = torch.clamp(dot_product, -1.0 + 1e-7, 1.0 - 1e-7)
+
+    # 5. 反余弦计算弧度 -> 转换为角度
+    angle_rad = torch.acos(dot_product)
+    angle_deg = torch.rad2deg(angle_rad)
+
+    return angle_deg
