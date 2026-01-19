@@ -1,0 +1,65 @@
+# Python 编译文件及缓存 (必须忽略)
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+
+# 虚拟环境 (Conda/Venv)
+# 防止把几千个环境包上传
+env/
+venv/
+.env
+.venv
+conda_env/
+
+# IDE 配置文件(Windows/VSCode/PyCharm)
+.idea/
+.vscode/
+*.swp
+*.swo
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# 核心数据与大文件
+# 忽略 data 文件夹下的所有内容
+data/*
+# 保留 data 文件夹本身（如果不加这个，git clone 下来会没有 data 文件夹）
+!data/.gitkeep
+
+# 显式忽略特定的大型数据集文件夹 (双重保险)
+3DPW_Dataset/
+AthletePose3D/
+
+# 模型权重与中间文件
+# 忽略所有 PyTorch 权重、Pickle 文件、Numpy 数组
+*.pth
+*.pt
+*.pkl
+*.npz
+*.npy
+*.onnx
+
+# 特例：如果你想提交某些小的配置文件 (比如 config.yaml)，可以在这里加 !
+# !src/configs/*.yaml
+
+# 运行输出结果
+# 忽略输出图片、日志、结果文件夹
+outputs/
+logs/
+*.png
+*.jpg
+*.jpeg
+*.mp4
+*.avi
+*.log
+
+# 第三方库
+# HybrIK 是外部 clone 进来的，不要把它作为代码提交
+third_party/HybrIK/
+third_party/smpl/
+
+# 打包构建文件
+build/
+dist/
+*.egg-info/
