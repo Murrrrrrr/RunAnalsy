@@ -1,5 +1,7 @@
 import sys
 from pathlib import Path
+
+import cv2
 import torch
 import matplotlib.pyplot as plt
 
@@ -12,16 +14,26 @@ from pose_solver.modules.pose_extractor import MediaPipeExtractor
 from pose_solver.modules.physics import PhysicsIMUSimulator
 from pose_solver.modules.solver import ManifoldSolver
 from pose_solver.modules.gait_analyzer import GaitEventDetector
+from pose_solver.data.video_io import VideoReader, VideoWriter
 
 
 def main():
-    video_path = "D:/MyRunningVideo.mp4"  # 替换为你的视频路径
+    video_path = r"D:\PythonProject\RunningAnalsy\data\running_video\run1.mp4" # 替换为你的视频路径
 
     # 1. 初始化模块
     extractor = MediaPipeExtractor()
     imu_sim = PhysicsIMUSimulator(Config.DEVICE)
     solver = ManifoldSolver(Config.DEVICE)
     analyzer = GaitEventDetector()
+
+    print(">>> 正在保存结果视频...")
+    reader = VideoReader(video_path)
+    output_file = r"D:\PythonProject\RunningAnalsy\video_outputs\result_skeleton.mp4"
+
+    with VideoWriter(output_file, reader.width, reader.height, reader.fps) as writer:
+        for i , frame in enumerate(reader):
+            cv2.putText(frame, f"Frame: {i}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            writer.write(frame)
 
     # 2. 视觉提取 (Visual Front-end)
     print(">>> 阶段1: MediaPipe 姿态提取...")
@@ -76,7 +88,6 @@ def main():
 
     plt.tight_layout()
     plt.show()
-
 
 if __name__ == "__main__":
     main()

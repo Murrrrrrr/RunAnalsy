@@ -45,10 +45,9 @@ class MediaPipeExtractor:
             results = self.pose_net.process(frame_rgb)
 
             if results.pose_world_landmarks:
-                #MediaPipe 的 world_landmarks 单位大约是米
-                #原点在臀部中心
                 frame_lm = []
-                for lm in results.pose_world_landmarks:
+                # 正确：遍历 container.landmark 才是列表
+                for lm in results.pose_world_landmarks.landmark:
                     frame_lm.append([lm.x, lm.y, lm.z])
                 world_landmarks.append(frame_lm)
             else:

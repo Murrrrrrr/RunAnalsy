@@ -13,14 +13,12 @@ class Config:
         print(f"[System] High-Performance GPU Mode: {torch.cuda.get_device_name(0)}")
 
     #路径管理
-
     # 自动定位项目根目录
     # 原理: config.py 在 src/pose_solver/core/ 下，往上跳 3 级就是项目根目录
     PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
     #将输出目录指向项目根目录下的 "outputs"
     OUTPUT_DIR = PROJECT_ROOT / "outputs"
-
     # 自动创建这个文件夹
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -28,6 +26,10 @@ class Config:
     PW3D_ROOT = Path(r"D:\PythonProject\RunningAnalsy\data\3DPW")
     PW3D_SEQ_DIR = PW3D_ROOT / "sequenceFiles"
     PW3D_IMG_DIR = PW3D_ROOT / "imageFiles"
+
+    #AthletePose3D数据集配置
+    ATHLETE_ROOT = Path(r"E:\googleDownload\AthletePose3D_data_set")
+    ATHLETE_FPS = 120.0
 
     # 模型权重路径 (保持在数据盘或移到项目内均可)
     DATA_ROOT = PW3D_ROOT.parent

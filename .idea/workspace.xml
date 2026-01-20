@@ -5,14 +5,14 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="a6fd240d-fa9a-4328-ae10-b8a55cf39c9b" name="更改" comment="">
-      <change afterPath="$PROJECT_DIR$/requirement" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/scripts/run_video_analysis.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/pose_solver/data/video_io.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/pose_solver/modules/gait_analyzer.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/pose_solver/modules/pose_extractor.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/pose_solver/modules/physics.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/pose_solver/modules/physics.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/pose_solver/utils/geometry.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/pose_solver/utils/geometry.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/run_demo.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/run_demo.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/run_video_analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/run_video_analysis.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pose_solver/core/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/pose_solver/core/config.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pose_solver/data/bridge.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/pose_solver/data/bridge.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pose_solver/data/video_io.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/pose_solver/data/video_io.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pose_solver/modules/gait_analyzer.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/pose_solver/modules/gait_analyzer.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pose_solver/modules/pose_extractor.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/pose_solver/modules/pose_extractor.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -40,18 +40,18 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "Python.run_demo.executor": "Run",
-    "Python.run_video_analysis.executor": "Run",
-    "Python.version.executor": "Run",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "main",
-    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;Python.run_demo.executor&quot;: &quot;Run&quot;,
+    &quot;Python.run_video_analysis.executor&quot;: &quot;Run&quot;,
+    &quot;Python.version.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;
   }
-}]]></component>
+}</component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>

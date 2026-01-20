@@ -11,28 +11,51 @@ def main():
     print("[Demo] 正在启动演示程序...")
     solver = ManifoldSolver(Config.DEVICE)
 
-    # 1. 扫描测试文件
-    # 注意：这里需要根据你实际想跑的数据集修改后缀 (.pkl 或 .npz)
-    test_files = list(Config.PW3D_SEQ_DIR.glob("test/*.pkl"))
+    # 1. 扫描测试文件 (修改了这里)
+    # ==========================================
+
+    # 模式选择：你想跑哪个数据集？
+    # 修改这个变量: '3DPW' 或 'ATHLETE'
+    DATASET_MODE = 'ATHLETE'
+
+    if DATASET_MODE == '3DPW':
+        # 原有逻辑
+        search_dir = Config.PW3D_SEQ_DIR / "test"
+        search_pattern = "*.pkl"
+    else:
+        # 新增逻辑: 扫描 E 盘的 AthletePose 数据
+        search_dir = Config.ATHLETE_ROOT
+        # 假设你的数据直接放在这个目录下，或者是子文件夹里
+        # 如果是子文件夹，可以用 "**/*.npy" (递归搜索)
+        search_pattern = "**/*_h36m.npy"
+
+    print(f"[System] 正在 {search_dir} 下扫描 {search_pattern} ...")
+    test_files = list(search_dir.glob(search_pattern))
 
     if not test_files:
-        print(f"错误: 在 {Config.PW3D_SEQ_DIR}/test 下没找到测试文件！")
+        print(f"错误: 在 {search_dir} 下没找到任何 {search_pattern} 文件！")
+        print("请检查: 1. config.py 里的路径是否写对; 2. 文件夹里是否有对应的 .pkl/.npy 文件")
         return
 
+    # 默认取第一个文件跑演示
     target_file = test_files[0]
     print(f"[Target] 目标文件: {target_file.name}")
 
-    # 2. 尝试加载数据 (这里加了详细调试)
-    print("[IO] 正在调用 DataBridge 加载数据...")
-
-    # --- 分支判断：你是跑 3DPW 还是 Athlete？---
+    # 2. 智能加载数据
     if target_file.suffix == '.pkl':
+        # 3DPW 数据
+        print("[IO] 检测到 .pkl 文件，使用 3DPW 加载器...")
         data = DataBridge.load_3dpw_metadata(target_file)
-    else:
-        # 假设你有这个适配 Athlete 的函数
+        fps = 30.0  # 3DPW 默认帧率
+    elif target_file.suffix == '.npy':
+        # AthletePose 数据
+        print("[IO] 检测到 .npy 文件，使用 AthletePose 加载器...")
         data = DataBridge.load_athlete_data(target_file)
-
-    print(f"[IO] 数据加载成功！帧数: {data.get('num_frames', '未知')}")
+        # 优先使用加载器返回的 FPS，如果没有则默认 120
+        fps = data.get('fps', Config.ATHLETE_FPS)
+    else:
+        print(f"不支持的文件格式: {target_file.suffix}")
+        return
 
     # 3. 提取数据
     try:
