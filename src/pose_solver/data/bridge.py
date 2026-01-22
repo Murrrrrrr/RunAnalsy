@@ -42,7 +42,7 @@ class DataBridge:
 
                 #数据填充，构造一个（T, 17, 3）的大矩阵
                 #Solver求解器期望的输入格式是（Time, Joints, 3），即认为全身17个关键点都应该有数据
-                #但上面只用了一个核心部位的数据，于是全部复制粘贴
+                #但上面只用了一个核心部位的数据，于是全部关节的点都复制粘贴
                 T = gt_trans.shape[0]
                 acc = torch.zeros(T, 17, 3)
                 gyro = torch.zeros(T, 17, 3)
@@ -51,6 +51,7 @@ class DataBridge:
                     gyro[:, i, :] = sim_gyro
                 print(f"[Bridge] 虚拟 IMU 数据生成完毕")
 
+            #打包好的字典，包含加速度、角速度、真实位移以及帧数
             return {
                 'acc': acc, 'gyro': gyro, 'gt_trans': gt_trans,
                 'num_frames': len(gt_trans)
@@ -62,7 +63,7 @@ class DataBridge:
     @staticmethod
     def load_athlete_data(data_path):
         """
-        [智能版] 加载 AthletePose 数据集并自动修正重力方向
+        加载 AthletePose 数据集并自动修正重力方向
         """
         data_path = Path(data_path)
         print(f"[Bridge] 正在加载 AthletePose 数据: {data_path.name}")
@@ -72,25 +73,23 @@ class DataBridge:
             kpts_3d_np = np.load(data_path, allow_pickle=True)
             kpts_3d = torch.tensor(kpts_3d_np, dtype=torch.float32)
 
-            # 提取根节点 (假设索引0)
+            # 提取根节点 (假设索引0是根节点)
             gt_trans = kpts_3d[:, 0, :]
             T = gt_trans.shape[0]
 
-            # ==========================================
-            # 2. [核心修复] 自动检测垂直轴 (Up-Axis)
-            # ==========================================
+            # 2.自动检测垂直轴
             # 逻辑：跑步时，人是站着的。平均坐标值最大的轴通常是高度轴。
-            # (X, Z 通常在原点附近波动，Y 或 Z 会有 ~0.9m 的平均高度)
-            mean_vals = torch.mean(gt_trans, dim=0)  # [mean_x, mean_y, mean_z]
+            # X, Z 通常在原点附近波动，Y或 Z会有 ~0.9m（人的腿长）的平均高度
+            mean_vals = torch.mean(gt_trans, dim=0)
+            #计算三个轴的平均值的绝对值，最大的判定为“垂直轴”
             up_axis_idx = torch.argmax(torch.abs(mean_vals)).item()
 
             axis_names = ['X', 'Y', 'Z']
             print(
                 f"[Bridge] 自动检测坐标系: {axis_names[up_axis_idx]}轴 似乎是垂直向上的 (Mean={mean_vals[up_axis_idx]:.2f}m)")
 
-            # ==========================================
-            # 3. 物理仿真 (Applied correct gravity)
-            # ==========================================
+            # 3. 物理仿真
+            # 利用有限差分法计算速度和加速度
             dt = 1.0 / Config.ATHLETE_FPS
 
             # v = dx/dt
@@ -104,7 +103,7 @@ class DataBridge:
             # 构造重力向量
             g_vec = torch.zeros(3)
             # 假设重力是负方向 (-9.8)，如果此时 up_axis 为正，则 g = [0, -9.8, 0]
-            # 传感器读数 = a_world - g
+            # 传感器读数 = a_world - g（因为IMU测量的是比力而不是“世界坐标加速度”）
             # 静止时: a=0, 读数 = 0 - (-9.8) = +9.8 (指向上方)
             g_vec[up_axis_idx] = -Config.GRAVITY
 
@@ -141,6 +140,7 @@ class DataBridge:
         data = DataBridge.load_3dpw_metadata(pkl_path)
         if data is None: return None
 
+        #sensor_idx=8 在SMPL模型中为骨盆位置，适合做中心运动分析
         imu_acc = data['acc'][:, sensor_idx, :]
         imu_gyro = data['gyro'][:, sensor_idx, :]
         trans = data['gt_trans']
