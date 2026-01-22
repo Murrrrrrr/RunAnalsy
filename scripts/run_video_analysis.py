@@ -18,7 +18,7 @@ from pose_solver.data.video_io import VideoReader, VideoWriter
 
 
 def main():
-    video_path = r"D:\PythonProject\RunningAnalsy\data\running_video\run1.mp4" # 替换为你的视频路径
+    video_path = r"E:\googleDownload\AthletePose3D_data_set\data\train_set\S3\Running_0_cam_1.mp4" # 替换为你的视频路径
 
     # 1. 初始化模块
     extractor = MediaPipeExtractor()

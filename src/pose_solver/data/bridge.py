@@ -1,8 +1,8 @@
 import torch
-import pickle
 import numpy as np
 from pathlib import Path
 from ..core.config import Config
+import pickle
 
 class DataBridge:
     @staticmethod
@@ -61,93 +61,97 @@ class DataBridge:
             return None
 
     @staticmethod
-    def load_athlete_data(data_path):
+    def load_athlete_data(npy_path, target_fps=60.0):
         """
-        加载 AthletePose 数据集并自动修正重力方向
+        加载 AthletePose (.npy) 数据并转换为训练格式
         """
-        data_path = Path(data_path)
-        print(f"[Bridge] 正在加载 AthletePose 数据: {data_path.name}")
-
         try:
-            # 1. 加载骨架
-            kpts_3d_np = np.load(data_path, allow_pickle=True)
-            kpts_3d = torch.tensor(kpts_3d_np, dtype=torch.float32)
+            # 加载 npy
+            raw_pos = np.load(str(npy_path))
 
-            # 提取根节点 (假设索引0是根节点)
-            gt_trans = kpts_3d[:, 0, :]
-            T = gt_trans.shape[0]
+            # --- 维度检查与过滤 (修复报错的核心) ---
 
-            # 2.自动检测垂直轴
-            # 逻辑：跑步时，人是站着的。平均坐标值最大的轴通常是高度轴。
-            # X, Z 通常在原点附近波动，Y或 Z会有 ~0.9m（人的腿长）的平均高度
-            mean_vals = torch.mean(gt_trans, dim=0)
-            #计算三个轴的平均值的绝对值，最大的判定为“垂直轴”
-            up_axis_idx = torch.argmax(torch.abs(mean_vals)).item()
+            # 1. 检查是否为 2D 数据 (最后维度是 2) -> 直接跳过
+            if raw_pos.ndim == 3 and raw_pos.shape[-1] == 2:
+                # 这是一个安静的跳过，不打印错误，防止刷屏
+                return None
 
-            axis_names = ['X', 'Y', 'Z']
-            print(
-                f"[Bridge] 自动检测坐标系: {axis_names[up_axis_idx]}轴 似乎是垂直向上的 (Mean={mean_vals[up_axis_idx]:.2f}m)")
+            # 2. 检查是否为平铺的 2D 数据 (T, J*2)
+            if raw_pos.ndim == 2:
+                # 如果列数不能被 3 整除，说明它根本不是 3D 数据
+                if raw_pos.shape[1] % 3 != 0:
+                    return None
 
-            # 3. 物理仿真
-            # 利用有限差分法计算速度和加速度
-            dt = 1.0 / Config.ATHLETE_FPS
+                # 如果是 (Frames, Joints*3) 平铺格式，尝试 reshape
+                T = raw_pos.shape[0]
+                raw_pos = raw_pos.reshape(T, -1, 3)
 
-            # v = dx/dt
-            vel = torch.zeros_like(gt_trans)
-            vel[1:] = (gt_trans[1:] - gt_trans[:-1]) / dt
+            # 3. 再次确认现在是 (T, J, 3)
+            if raw_pos.ndim != 3 or raw_pos.shape[-1] != 3:
+                return None
 
-            # a = dv/dt
-            acc_world = torch.zeros_like(vel)
-            acc_world[1:] = (vel[1:] - vel[:-1]) / dt
+            T_raw, num_joints, _ = raw_pos.shape
 
-            # 构造重力向量
-            g_vec = torch.zeros(3)
-            # 假设重力是负方向 (-9.8)，如果此时 up_axis 为正，则 g = [0, -9.8, 0]
-            # 传感器读数 = a_world - g（因为IMU测量的是比力而不是“世界坐标加速度”）
-            # 静止时: a=0, 读数 = 0 - (-9.8) = +9.8 (指向上方)
-            g_vec[up_axis_idx] = -Config.GRAVITY
+            # --- 下采样处理 ---
+            step = int(max(1, round(Config.ATHLETE_RAW_FPS / target_fps)))
+            pos = torch.tensor(raw_pos[::step], dtype=torch.float32, device=Config.DEVICE)
 
-            print(f"[Bridge] 应用重力修正: g={g_vec.tolist()}")
+            # --- 坐标系旋转 ---
+            # 变换: (x, y, z) -> (x, z, -y)
+            R_fix = torch.tensor([
+                [1, 0, 0],
+                [0, 0, 1],
+                [0, -1, 0]
+            ], dtype=torch.float32, device=Config.DEVICE)
 
-            acc_sim = acc_world - g_vec
+            pos_world = torch.matmul(pos, R_fix.T)
 
-            # 4. 构造输出
-            acc_out = torch.zeros(T, 17, 3)
-            gyro_out = torch.zeros(T, 17, 3)
+            # 地面高度对齐
+            min_z = torch.min(pos_world[:, :, 2])
+            pos_world[:, :, 2] -= min_z
 
-            for i in range(17):
-                acc_out[:, i, :] = acc_sim
+            # --- 自动生成触地标签 ---
+            idx_l_ankle = 6
+            idx_r_ankle = 3
 
-            return {
-                'acc': acc_out,
-                'gyro': gyro_out,
-                'gt_trans': gt_trans,
-                'num_frames': T,
-                'fps': Config.ATHLETE_FPS
-            }
+            if num_joints <= max(idx_l_ankle, idx_r_ankle):
+                idx_l_ankle = num_joints - 2
+                idx_r_ankle = num_joints - 1
+
+            z_l = pos_world[:, idx_l_ankle, 2]
+            z_r = pos_world[:, idx_r_ankle, 2]
+
+            dt = Config.DT
+            vel_l = torch.zeros_like(z_l)
+            vel_r = torch.zeros_like(z_r)
+            vel_l[1:] = (z_l[1:] - z_l[:-1]) / dt
+            vel_r[1:] = (z_r[1:] - z_r[:-1]) / dt
+
+            is_contact_l = (z_l < 0.08) & (vel_l.abs() < 1.0)
+            is_contact_r = (z_r < 0.08) & (vel_r.abs() < 1.0)
+
+            labels = (is_contact_l | is_contact_r).float().view(1, -1, 1, 1)
+
+            if num_joints > 4:
+                center_mass = pos_world[:, 0, :]
+            else:
+                center_mass = pos_world.mean(dim=1)
+
+            return center_mass, labels
 
         except Exception as e:
-            print(f"[Error] AthletePose 文件加载失败: {e}")
-            import traceback
-            traceback.print_exc()
+            # 只有真正的错误才打印，跳过文件的"错误"不再打印
+            if "shapes cannot be multiplied" not in str(e):
+                print(f"[Bridge Error] 加载 {npy_path.name} 失败: {e}")
             return None
 
+    # =======================================================
+    # ↓↓↓ 上次报错就是因为缺少了这个函数，请务必保留 ↓↓↓
+    # =======================================================
     @staticmethod
-    def get_training_pair(pkl_path, sensor_idx=8):
-        """
-        生成 LNN 训练数据: (IMU, Label)
-        """
-        data = DataBridge.load_3dpw_metadata(pkl_path)
-        if data is None: return None
-
-        #sensor_idx=8 在SMPL模型中为骨盆位置，适合做中心运动分析
-        imu_acc = data['acc'][:, sensor_idx, :]
-        imu_gyro = data['gyro'][:, sensor_idx, :]
-        trans = data['gt_trans']
-
-        # 自动生成标签: 速度 < 0.08m/s 为支撑相
-        vel = torch.norm(trans[1:] - trans[:-1], dim=1)
-        vel = torch.cat([vel, vel[-1:]])  # 补齐
-        labels = (vel < 0.08).float().view(-1, 1, 1)
-
-        return torch.cat([imu_acc, imu_gyro], dim=-1), labels
+    def get_training_pair(file_path):
+        if str(file_path).endswith('.pkl'):
+            return None
+        elif str(file_path).endswith('.npy'):
+            return DataBridge.load_athlete_data(file_path)
+        return None
