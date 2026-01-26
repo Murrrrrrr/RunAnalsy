@@ -1,0 +1,28 @@
+# 核心计算库
+numpy
+torch>=1.10.0
+torchvision
+scipy
+pandas
+
+# 图像与视频处理 (新增 MediaPipe)
+opencv-python
+mediapipe
+matplotlib
+Pillow
+
+# 3D 处理与可视化
+open3d
+trimesh
+imageio
+
+# 进度条与工具
+tqdm
+pyyaml
+easydict
+joblib
+
+# 可选：如果你需要运行 HybrIK (第三方库)
+# smplx
+# yacs
+# h5py
