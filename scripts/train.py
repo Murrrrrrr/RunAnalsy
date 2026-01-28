@@ -41,7 +41,7 @@ def pad_collate_fn(batch):
 
     return inputs_padded, labels_padded, lengths
 
-def calculate_metrics_masked(logits, labels, mask, threshold=0.3):
+def calculate_metrics_masked(logits, labels, mask, threshold=0.3  ):
     """
     只计算真实数据部分的指标，忽略 Padding 部分
     """
@@ -165,7 +165,7 @@ def train():
     # 损失函数: reduction='none'
     # 目的是为了告诉 PyTorch 不要直接算平均 Loss，而是把每个样本的 Loss都返回给我
     # 这样我们才能手动乘以 Mask来剔除无效区域
-    pos_weight = torch.tensor([10.0]).to(Config.DEVICE)
+    pos_weight = torch.tensor([3.0]).to(Config.DEVICE)
     criterion = nn.BCEWithLogitsLoss(reduction='none', pos_weight=pos_weight)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     # 学习率衰减：每10个 Epoch 学习率变为原来的0.5倍

@@ -1,9 +1,6 @@
 import torch
 import numpy as np
 from pathlib import Path
-
-from prompt_toolkit.key_binding.bindings.named_commands import forward_char
-
 from ..core.config import Config
 import pickle
 import scipy.signal
@@ -26,14 +23,14 @@ class DataBridge:
             poses_raw = data['poses'][p_idx] #poses:(T, 72) SMPL姿态参数
             trans_raw = data['trans'][p_idx] #trans:(T, 3) 根节点（骨盆）在世界坐标系的位移
             #转化为Tensor
-            gt_trans = torch.tensor(trans_raw, dtype=torch.float32)
+            gt_trans = torch.tensor(trans_raw, dtype=torch.float32, device='cpu')
             # [:, :3]是只取了SMPL模型中的前三个数值，即“骨盆/根节点”的三个朝向
-            gt_root_pose = torch.tensor(poses_raw[:, :3], dtype=torch.float32)
+            gt_root_pose = torch.tensor(poses_raw[:, :3], dtype=torch.float32, device='cpu')
 
             if 'imu_accel' in data:
                 #情况A：有真实的IMU数据
-                acc = torch.tensor(data['imu_accel'][p_idx], dtype=torch.float32)
-                gyro = torch.tensor(data['imu_ang_vel'][p_idx], dtype=torch.float32)
+                acc = torch.tensor(data['imu_accel'][p_idx], dtype=torch.float32, device='cpu')
+                gyro = torch.tensor(data['imu_ang_vel'][p_idx], dtype=torch.float32, device='cpu')
                 print(f"[Bridge] 使用真实 IMU 数据")
             else:
                 #情况B：没有真实的IMU数据 -> 启动物理仿真
@@ -52,12 +49,12 @@ class DataBridge:
                 #Solver求解器期望的输入格式是（Time, Joints, 3），即认为全身17个关键点都应该有数据
                 #但上面只用了一个核心部位的数据，于是全部关节的点都复制粘贴
                 T = gt_trans.shape[0]
-                acc = torch.zeros(T, 17, 3)
-                gyro = torch.zeros(T, 17, 3)
+                acc = torch.zeros(T, 17, 3, device='cpu')
+                gyro = torch.zeros(T, 17, 3, device='cpu')
                 for i in range(17):
                     acc[:, i, :] = sim_acc
                     gyro[:, i, :] = sim_gyro
-                print(f"[Bridge] 虚拟 IMU 数据生成完毕")
+                print(f"虚拟 IMU 数据生成完毕")
 
             #打包好的字典，包含加速度、角速度、真实位移以及帧数
             return {
@@ -73,13 +70,18 @@ class DataBridge:
     @staticmethod
     def _detect_phases_zeni(center_mass, ankle_pos, fps):
         """
-        Zeni 算法 (V2.0 自适应增强版)
-        解决：原地跑速度为0问题、单位不统一问题
+        Zeni 算法
         """
+        # 确保输入是CPU上的数据
+        if isinstance(center_mass, torch.Tensor):
+            center_mass = center_mass.cpu().numpy()
+        if isinstance(ankle_pos, torch.Tensor):
+            ankle_pos = ankle_pos.cpu().numpy()
+
         T = len(center_mass)
         device = center_mass.device
 
-        # --- 1. 自动确定前后轴 (PCA-based) ---
+        # 1. 自动确定前后轴
         # 即使原地跑，脚踝相对于骨盆的相对运动(Relative Motion)在前后方向上方差最大
         rel_pos = ankle_pos - center_mass  # (T, 3)
         rel_pos_xy = rel_pos[:, :2]  # 只看水平面
@@ -98,7 +100,7 @@ class DataBridge:
             # 极少数情况 SVD 失败，回退到假设 Y 轴
             forward_dir = torch.tensor([0.0, 1.0], device=device)
 
-        # --- 2. 投影计算 AP 曲线 ---
+        # 2. 投影计算 AP 曲线
         # (T, 2) * (2,) -> (T,)
         dist_ap = (rel_pos_xy * forward_dir).sum(dim=1).cpu().numpy()
 
@@ -108,7 +110,7 @@ class DataBridge:
         # 为了稳健，我们通过检测偏度(Skewness)或直接取极大极小值。
         # 这里维持简单逻辑：取最大值作为 HS 候选。
 
-        # --- 3. 自适应信号归一化 ---
+        # 3. 自适应信号归一化
         # 不管单位是 m 还是 mm，统一缩放到 0~1 范围处理
         d_min = np.min(dist_ap)
         d_max = np.max(dist_ap)
@@ -205,18 +207,21 @@ class DataBridge:
             # step = 120 / 60 =2，意味着每隔一个帧取一个数据
             step = int(max(1, round(Config.ATHLETE_RAW_FPS / target_fps)))
             # 转为PyTorch Tensor，并移动到配置的设备上
-            pos = torch.tensor(raw_pos[::step], dtype=torch.float32, device=Config.DEVICE)
+            pos = torch.tensor(raw_pos[::step], dtype=torch.float32, device='cpu')
+
+            # 【单位自动检测与修正】
+            # 如果数据的平均高度特别大，往下除
+            if pos.abs().mean() > 10.0:
+                pos /=1000.0
 
             # 【坐标系旋转】
             # 变换: (x, y, z) -> (x, z, -y)
             # 即绕着X轴旋转了-90度
-            R_fix = torch.tensor([
-                [1, 0, 0],
-                [0, 0, 1],
-                [0, -1, 0]
-            ], dtype=torch.float32, device=Config.DEVICE)
+            x = pos[..., 0]
+            y = pos[..., 1]
+            z = pos[..., 2]
 
-            pos_world = torch.matmul(pos, R_fix.T)
+            pos_world = torch.stack([x, z, -y], dim=-1)
 
             # 【地面高度对齐】
             # 找到整个序列中 Z 的最小值，然后所有人减去这个值

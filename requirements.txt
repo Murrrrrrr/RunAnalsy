@@ -5,8 +5,9 @@ torchvision
 scipy
 pandas
 
-# 图像与视频处理 (新增 MediaPipe)
-opencv-python
+# 图像与视频处理
+# 优化：在服务器/无头模式下使用 headless 版本，减小体积且无需 X11 库
+opencv-python-headless
 mediapipe
 matplotlib
 Pillow
@@ -21,8 +22,3 @@ tqdm
 pyyaml
 easydict
 joblib
-
-# 可选：如果你需要运行 HybrIK (第三方库)
-# smplx
-# yacs
-# h5py
