@@ -5,13 +5,15 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="a6fd240d-fa9a-4328-ae10-b8a55cf39c9b" name="更改" comment="">
-      <change afterPath="$PROJECT_DIR$/scripts/debug_data.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/scripts/extract_frames.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/check.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/debug_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/debug_data.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/run_video_analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/run_video_analysis.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/test.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/data_test.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/scripts/train.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/train.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/pose_solver/data/bridge.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/pose_solver/data/bridge.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pose_solver/core/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/pose_solver/core/config.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/pose_solver/data/dataset.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/pose_solver/data/dataset.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pose_solver/modules/gait_analyzer.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/pose_solver/modules/gait_analyzer.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -46,6 +48,7 @@
     "Python.check_gpu.executor": "Run",
     "Python.config.executor": "Run",
     "Python.debug_data.executor": "Run",
+    "Python.extract_frames.executor": "Run",
     "Python.run_demo.executor": "Run",
     "Python.run_video_analysis.executor": "Run",
     "Python.test.executor": "Run",

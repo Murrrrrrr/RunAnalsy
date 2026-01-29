@@ -1,91 +1,175 @@
 import sys
+import argparse
+import logging
 from pathlib import Path
 import cv2
 import torch
 import matplotlib.pyplot as plt
-# 确保能导入 src
-project_root = Path(__file__).resolve().parents[1]
-sys.path.append(str(project_root / "src"))
+import numpy as np
 
+# --- 动态添加路径 (保持原有 Hack，但更安全) ---
+current_file = Path(__file__).resolve()
+project_root = current_file.parents[1]
+src_path = project_root / "src"
+if str(src_path) not in sys.path:
+    sys.path.append(str(src_path))
+
+# --- 模块导入 ---
 from pose_solver.core.config import Config
 from pose_solver.modules.pose_extractor import MediaPipeExtractor
 from pose_solver.modules.physics import PhysicsIMUSimulator
 from pose_solver.modules.solver import ManifoldSolver
 from pose_solver.modules.gait_analyzer import GaitEventDetector
-from pose_solver.data.video_io import VideoReader, VideoWriter
+
+# --- 日志配置 ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - [%(levelname)s] - %(message)s',
+    handlers=[logging.StreamHandler()]
+)
+logger = logging.getLogger("Runner")
 
 
-def main():
-    video_path = r"E:\googleDownload\AthletePose3D_data_set\data\train_set\S3\Running_0_cam_1.mp4" # 替换为你的视频路径
+class GaitAnalysisPipeline:
+    def __init__(self, output_dir: str):
+        self.device = Config.DEVICE
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. 初始化模块
-    extractor = MediaPipeExtractor()
-    imu_sim = PhysicsIMUSimulator(Config.DEVICE)
-    solver = ManifoldSolver(Config.DEVICE)
-    analyzer = GaitEventDetector()
+        logger.info(f"初始化管线，运行设备: {self.device}")
 
-    print(">>> 正在保存结果视频...")
-    reader = VideoReader(video_path)
-    output_file = r"D:\PythonProject\RunningAnalsy\video_outputs\result_skeleton.mp4"
+        # 初始化子模块
+        self.extractor = MediaPipeExtractor()
+        self.imu_sim = PhysicsIMUSimulator(self.device)
+        self.solver = ManifoldSolver(self.device)
+        self.analyzer = GaitEventDetector()
 
-    with VideoWriter(output_file, reader.width, reader.height, reader.fps) as writer:
-        for i , frame in enumerate(reader):
-            cv2.putText(frame, f"Frame: {i}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            writer.write(frame)
+    def run(self, video_path: str):
+        video_path = Path(video_path)
+        if not video_path.exists():
+            logger.error(f"视频文件不存在: {video_path}")
+            return
 
-    # 2. 视觉提取 (Visual Front-end)
-    print(">>> 阶段1: MediaPipe 姿态提取...")
-    # raw_pos shape: (T, 33, 3)
-    raw_pos_tensor, (w, h, fps) = extractor.extract_from_video(video_path)
+        logger.info(f"开始处理视频: {video_path.name}")
 
-    # 选取关键点：取两髋中点作为躯干中心 (MediaPipe 23, 24)
-    left_hip = raw_pos_tensor[:, 23, :]
-    right_hip = raw_pos_tensor[:, 24, :]
-    center_mass = (left_hip + right_hip) / 2.0
+        # 1. 视觉提取
+        raw_pos_tensor, meta = self._step_vision_extraction(video_path)
+        fps = meta['fps']
 
-    # 3. 物理仿真 (Physics Simulation)
-    print(">>> 阶段2: 逆向动力学仿真生成虚拟传感器数据...")
-    # 生成虚拟加速度 (用于输入 LNN 判断触地)
-    fake_acc, fake_gyro = imu_sim.simulate_from_position_only(center_mass)
+        # 2. 物理仿真
+        center_mass, fake_acc, fake_gyro = self._step_physics_sim(raw_pos_tensor)
 
-    # 4. 概率优化 (LNN Inference)
-    print(">>> 阶段3: LNN 步态相位预测与物理优化...")
-    # 注意：solve_liquid_pakr 返回优化后的轨迹和触地概率
-    # 这里我们将 center_mass 作为待优化轨迹输入
-    refined_pos, contact_probs = solver.solve_liquid_pakr(center_mass, fake_acc, fake_gyro)
+        # 3. 求解优化 (LNN)
+        refined_pos, contact_probs = self._step_solver(center_mass, fake_acc, fake_gyro)
 
-    # 5. 关键帧提取 (Keyframe Extraction)
-    print(">>> 阶段4: 关键帧事件检测...")
-    events = analyzer.detect_events_from_probs(contact_probs, fps)
+        # 4. 步态分析
+        analysis_result = self.analyzer.detect_events_from_probs(contact_probs, fps)
 
-    print(f"分析结果:")
-    print(f"  - 检测到步数: {len(events['strides'])}")
-    print(f"  - 估算步频: {events['cadence']:.1f} SPM")
-    print(f"  - 触地帧索引: {events['ic_indices']}")
+        self._log_results(analysis_result)
 
-    # 6. 可视化结果
-    plt.figure(figsize=(12, 6))
+        # 5. 可视化 & 输出
+        self._visualize_charts(center_mass, refined_pos, contact_probs, analysis_result, video_path.stem)
 
-    # 绘制 Z 轴高度变化
-    t = range(len(center_mass))
-    plt.subplot(2, 1, 1)
-    plt.plot(t, center_mass[:, 1].cpu().numpy(), label='Raw Hip Height (Y)', alpha=0.6)
-    plt.plot(t, refined_pos[:, 1].cpu().numpy(), label='Refined Hip Height', linewidth=2)
-    # 标记关键帧
-    plt.scatter(events['ic_indices'], refined_pos[events['ic_indices'], 1].cpu(), c='r', marker='x',
-                label='IC (Strike)')
-    plt.legend()
-    plt.title("Trajectory & Keyframes")
+        # 6. 生成骨架视频 (可选)
+        # self._render_output_video(video_path, analysis_result)
 
-    # 绘制触地概率
-    plt.subplot(2, 1, 2)
-    plt.plot(t, contact_probs, color='orange', label='LNN Contact Probability')
-    plt.axhline(0.5, color='gray', linestyle='--')
-    plt.fill_between(t, 0, contact_probs, alpha=0.3, color='orange')
-    plt.title("Stance Phase Probability")
+    def _step_vision_extraction(self, video_path: Path):
+        logger.info(">>> [阶段 1/4] MediaPipe 姿态提取...")
+        try:
+            # raw_pos shape: (T, 33, 3)
+            raw_pos_tensor, (w, h, fps) = self.extractor.extract_from_video(str(video_path))
+            return raw_pos_tensor, {'width': w, 'height': h, 'fps': fps}
+        except Exception as e:
+            logger.error(f"姿态提取失败: {e}")
+            sys.exit(1)
 
-    plt.tight_layout()
-    plt.show()
+    def _step_physics_sim(self, raw_pos_tensor: torch.Tensor):
+        logger.info(">>> [阶段 2/4] 物理仿真生成虚拟传感器...")
+        # 选取关键点：取两髋中点 (MediaPipe 23: left_hip, 24: right_hip)
+        left_hip = raw_pos_tensor[:, 23, :]
+        right_hip = raw_pos_tensor[:, 24, :]
+        center_mass = (left_hip + right_hip) / 2.0
+
+        # 生成虚拟加速度
+        fake_acc, fake_gyro = self.imu_sim.simulate_from_position_only(center_mass)
+        return center_mass, fake_acc, fake_gyro
+
+    def _step_solver(self, center_mass, acc, gyro):
+        logger.info(">>> [阶段 3/4] LNN 动力学优化...")
+        refined_pos, contact_probs = self.solver.solve_liquid_pakr(center_mass, acc, gyro)
+
+        # 转换为 numpy 方便绘图，如果已经是 Tensor 则保留
+        if isinstance(contact_probs, torch.Tensor):
+            contact_probs = contact_probs.detach().cpu().numpy()
+
+        return refined_pos, contact_probs
+
+    def _log_results(self, res):
+        logger.info("-" * 30)
+        logger.info(f"分析完成:")
+        logger.info(f"  - 完整步数: {res.stride_count}")
+        logger.info(f"  - 估算步频: {res.cadence:.1f} SPM")
+        logger.info(f"  - 触地帧数: {len(res.ic_indices)}")
+        logger.info("-" * 30)
+
+    def _visualize_charts(self, raw_pos, refined_pos, probs, res, filename_stem):
+        logger.info(">>> [阶段 4/4] 生成分析图表...")
+
+        plt.style.use('bmh')  # 使用更好看的样式
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+
+        t = np.arange(len(raw_pos))
+
+        # 子图 1: 轨迹对比
+        raw_y = raw_pos[:, 1].detach().cpu().numpy()
+        ref_y = refined_pos[:, 1].detach().cpu().numpy()
+
+        ax1.plot(t, raw_y, label='Raw Hip Height (Y)', color='gray', alpha=0.5, linestyle='--')
+        ax1.plot(t, ref_y, label='LNN Refined Height', color='#1f77b4', linewidth=2)
+
+        # 标记触地事件
+        if len(res.ic_indices) > 0:
+            ax1.scatter(res.ic_indices, ref_y[res.ic_indices], color='red', marker='x', s=100, zorder=5,
+                        label='Initial Contact')
+
+        ax1.set_ylabel("Height (Norm)")
+        ax1.set_title(f"Gait Trajectory Analysis: {filename_stem}")
+        ax1.legend()
+
+        # 子图 2: 触地概率
+        ax2.plot(t, probs, color='#ff7f0e', label='Contact Probability')
+        ax2.axhline(0.5, color='black', linestyle=':', alpha=0.5)
+        ax2.fill_between(t, 0, probs, alpha=0.3, color='#ff7f0e')
+
+        # 标记步态周期区间
+        for stride in res.strides:
+            ax2.axvspan(stride['start_frame'], stride['end_frame'], color='green', alpha=0.1)
+
+        ax2.set_ylabel("Probability")
+        ax2.set_xlabel("Frame Index")
+        ax2.set_title("Stance Phase Detection")
+
+        plt.tight_layout()
+
+        save_path = self.output_dir / f"{filename_stem}_analysis.png"
+        plt.savefig(save_path, dpi=150)
+        logger.info(f"图表已保存: {save_path}")
+        # plt.show() # 服务器端运行时通常关闭 show
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run Video Gait Analysis Pipeline")
+    parser.add_argument("--input", "-i", type=str, required=True, help="输入视频文件路径")
+    parser.add_argument("--output", "-o", type=str, default="output_results", help="结果输出文件夹")
+    parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="计算设备")
+    return parser.parse_args()
+
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+
+    # 更新 Config (如果 Config 类支持动态更新)
+    Config.DEVICE = args.device
+
+    pipeline = GaitAnalysisPipeline(output_dir=args.output)
+    pipeline.run(args.input)

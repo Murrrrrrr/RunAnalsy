@@ -5,7 +5,6 @@ sys.path.append(str(Path(__file__).parent.parent))  # 把 src 加入路径
 
 from src.pose_solver.data.bridge import DataBridge
 
-# 替换成你自己的一个真实文件路径
 test_file = Path(r"E:\googleDownload\AthletePose3D_data_set\data\train_set\S2\Axel_1_cam_1_h36m.npy")
 
 if test_file.exists():

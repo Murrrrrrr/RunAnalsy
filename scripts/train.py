@@ -128,12 +128,15 @@ def train():
     print(f"可用GPU数: {gpu_count}")
 
     # 根据显存大小调整 Batch Size
-    BATCH_SIZE = 32 * gpu_count
-    NUM_WORKERS = 8  # cpu核数
+    BATCH_SIZE = Config.GPU_MENMORY * gpu_count
+    NUM_WORKERS = Config.CPU_CORES  # cpu核数
 
     print(f"[提示] 加载训练集...")
-    train_ds = AthleteLNNDataset(Config.ATHLETE_TRAIN_DIR, augment=True)
-    # 使用自定义的 collate_fn
+    train_ds = AthleteLNNDataset(
+        Config.ATHLETE_TRAIN_DIR,
+        augment=True,
+        target_subsets=Config.TRAIN_SUBSETS
+    )
     train_loader = DataLoader(
         train_ds,
         batch_size=BATCH_SIZE,
@@ -144,7 +147,11 @@ def train():
     )
 
     print(f"[提示] 加载验证集...")
-    val_ds = AthleteLNNDataset(Config.ATHLETE_VAL_DIR, augment=False)
+    val_ds = AthleteLNNDataset(
+        Config.ATHLETE_VAL_DIR,
+        augment=False,
+        target_subsets=Config.VAL_SUBSETS
+    )
     val_loader = DataLoader(
         val_ds,
         batch_size=BATCH_SIZE,
@@ -165,7 +172,7 @@ def train():
     # 损失函数: reduction='none'
     # 目的是为了告诉 PyTorch 不要直接算平均 Loss，而是把每个样本的 Loss都返回给我
     # 这样我们才能手动乘以 Mask来剔除无效区域
-    pos_weight = torch.tensor([3.0]).to(Config.DEVICE)
+    pos_weight = torch.tensor([25.0]).to(Config.DEVICE)
     criterion = nn.BCEWithLogitsLoss(reduction='none', pos_weight=pos_weight)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     # 学习率衰减：每10个 Epoch 学习率变为原来的0.5倍

@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from open3d.examples.pipelines.colored_icp_registration import target
 from torch.utils.data import Dataset
 from pathlib import Path
 
@@ -8,21 +9,32 @@ from .bridge import DataBridge
 from ..modules.physics import PhysicsIMUSimulator
 
 class AthleteLNNDataset(Dataset):
-    def __init__(self, data_root, search_pattern="**/*_h36m.npy", device = None, augment=True):
+    def __init__(self, data_root, search_pattern="**/*_h36m.npy", device = None, augment=True, target_subsets=None):
         """
         :param augment: 是否开启数据增强 (训练集True, 验证集False)
         """
         self.data_root = Path(data_root)
-
-        # 搜索所有的 .npy文件
-        self.files = list(self.data_root.glob(search_pattern))
-
-        # 【关键参数】决定是否在训练时给数据加噪
-        self.augment = augment
+        self.augment = augment #【关键参数】决定是否在训练时给数据加噪
 
         # 初始化物理仿真器，强制使用CPU
         # 如果使用GPU的话，容易导致CUDA初始化报错或者显存碎片化
         self.imu_sim = PhysicsIMUSimulator('cpu')
+
+        all_files = list(self.data_root.glob(search_pattern))
+        if target_subsets is not None and len(target_subsets) > 0:
+            self.files = []
+            print(f"[数据集] 正在根据配置文件筛选子集: {target_subsets}")
+            for f in all_files:
+                if f.parent.name in target_subsets:
+                    self.files.append(f)
+
+            # 兜底检查
+            if len(self.files) == 0:
+                print(f"[警告] 在 {self.data_root} 下没找到任何属于 {target_subsets} 的文件！")
+                print(f"请检查文件夹结构是否多了一层？例如 data/train_set/S3/01/xxx.npy")
+        else:
+            # 如果 Config 里没写 (None)，则加载所有
+            self.files = all_files
 
         print(f"目标帧率：{Config.ATHLETE_FPS}")
 
@@ -33,7 +45,6 @@ class AthleteLNNDataset(Dataset):
         return len(self.files)
 
     def __getitem__(self, idx):
-        # 优化：使用 while 循环替代递归，防止 RecursionError
         attempts = 0
         max_attempts = 100  # 防止无限死循环
 
